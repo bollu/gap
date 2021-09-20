@@ -537,6 +537,25 @@ public:
   }
 };
 
+
+class StxList : public StxExpr {
+  public:
+  StxList(vector<StxExpr *> args) : args(args) {};
+
+
+  void print(std::ostream &o) const {
+    o << "[";
+    for(int i = 0; i < args.size(); ++i){
+      if (i > 0) o << ", ";
+      args[i]->print(o);
+    }
+    o << "]";
+  }
+
+  private:
+  vector<StxExpr *> args;
+};
+
 class StxStmt {
 public:
   virtual void print(std::ostream &o, int indent) const = 0;
@@ -586,27 +605,29 @@ StxExpr *parse_expr(Tokenizer &t) {
 }
 
 // 4.11
-vector<StxExpr *> parse_call_args(Tokenizer &t) {
+// parse expressions delimited by sl, sr
+vector<StxExpr *> parse_exprs_delimited(Tokenizer &t, string sl, string sr) {
   std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
   // function call
-  t.consume_symbol("(");
+  t.consume_symbol(sl);
 
   std::vector<StxExpr *> args;
-  if (t.peek_symbol(")")) {
-    t.consume_symbol(")");
+  if (t.peek_symbol(sr)) {
+    t.consume_symbol(sr);
     return args;
   }
   while (1) {
     args.push_back(parse_expr(t));
-    if (t.peek_symbol(")")) {
-      t.consume_symbol(")");
+    if (t.peek_symbol(sr)) {
+      t.consume_symbol(sr);
       break;
     } else if (t.peek_symbol(",")) {
       t.consume_symbol(",");
       continue;
     } else {
       t.print_span(t.peek_raw().span);
-      assert(false && "expected , or ) in function call");
+      cerr << "expected list of expressions of the form |" << sl << "expr, expr, ... " << sr << "|\n";
+      assert(false && "unknown parse in expression sequence");
     }
   }
   return args;
@@ -622,11 +643,15 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
   } else if (p.kind == Token::Kind::TOK_IDENTIFIER) {
     t.consume_identifier();
     if (t.peek_symbol("(")) {
-      std::vector<StxExpr *> args = parse_call_args(t);
+      std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
       return new StxFnCall(p, args);
     } else {
       return new StxVar(p);
     }
+  } else if (p.kind == Token::Kind::TOK_SYMBOL && p.str == "[") {
+    t.print_span(p.span);
+    vector<StxExpr *> args = parse_exprs_delimited(t, "[", "]");
+    return new StxList(args);
   } else {
     t.print_span(p.span);
     assert(false && "unknown expression leaf token");
@@ -638,7 +663,8 @@ StxStmt *parse_assgn_or_procedure_call(Tokenizer &t) {
   std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
   Token name = t.consume_identifier(); // todo: generalize to lvalue.
   if (t.peek_symbol("(")) {
-    std::vector<StxExpr *> args = parse_call_args(t);
+    std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
+    t.consume_symbol(";");
     return new StxProcedureCall(name, args);
   } else if (t.peek_symbol(":=")) {
     StxExpr *rhs = parse_expr(t);
