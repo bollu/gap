@@ -735,7 +735,7 @@ public:
 
 class StxFnDefn : public StxExpr {
   public:
-    StxFnDefn(vector<Token> params, StxBlock *stmts) : params(params), stmts(stmts) {};
+    StxFnDefn(vector<Token> params, vector<Token> locals, StxBlock *stmts) : params(params), locals(locals), stmts(stmts) {};
 
   void print(std::ostream &o) const {
     o << "function (";
@@ -749,6 +749,7 @@ class StxFnDefn : public StxExpr {
   }
   private:
     vector<Token> params;
+    vector<Token> locals;
     StxBlock *stmts;
 };
 
@@ -897,10 +898,29 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
     }
   }
 
+  // now parse locals
+  vector<Token> locals;
+  if (t.peek_keyword("local")) {
+    t.consume_keyword("local");
+    while(1) {
+      locals.push_back(t.consume_identifier());
+      if (t.peek_symbol(";")) {
+        t.consume_symbol(";"); break;
+      } else if (t.peek_symbol(",")) {
+        t.consume_symbol(",");
+        continue;
+      } else {
+        t.print_current_loc();
+        cerr << "Expected ; or , in function definition argument list\n";
+        assert(false && "expect ; or , in locals list");
+      }
+    }
+  }
+
   // done parsng function params. now parse statements.
   StxBlock *stmts = parse_stmts(t, [](Tokenizer &t) -> bool { return bool(t.peek_keyword("end")); });
   t.consume_keyword("end");
-  return new StxFnDefn(params, stmts);
+  return new StxFnDefn(params, locals, stmts);
 }
 
 // variable (4.8) or function call (4.11) or string or function defn
@@ -919,7 +939,9 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
     if (t.peek_symbol("->")) {
       t.consume_symbol("->");
       StxExpr *rhs = parse_expr(t);
-      return new StxFnDefn({*ident}, new StxBlock({new StxReturn(rhs)}));
+      const vector<Token> params= {*ident};
+      const vector<Token> locals;
+      return new StxFnDefn(params, locals, new StxBlock({new StxReturn(rhs)}));
     } else if (t.peek_symbol("(")) {
       std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
       return new StxFnCall(*ident, args);
