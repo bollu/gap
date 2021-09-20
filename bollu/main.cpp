@@ -238,10 +238,15 @@ struct Tokenizer {
   Token consume_symbol(string s) {
     assert(symbols.count(s));
     optional<Token> t = peek_symbol(s);
-    assert(bool(t));
+    if (t) {
     assert(this->loc == t->span.begin);
     this->loc = t->span.end;
     return *t;
+    } else {
+      this->print_current_loc();
+      cerr << "Expected symbol |" << s << "|\n";
+      assert(false && "expected symbol");
+    }
   }
 
   Token consume_keyword(string s) {
@@ -969,6 +974,11 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
     return new StxList(args);
   }  else if (t.peek_keyword("function")) {
     return parse_fn_defn(t);
+  } else if (t.peek_symbol("(")) {
+    t.consume_symbol("(");
+    StxExpr *e = parse_expr(t);
+    t.consume_symbol(")");
+    return e;
   } else {
     t.print_current_loc();
     assert(false && "unknown expression leaf token");
