@@ -874,25 +874,24 @@ StxStmt *parse_stmt(Tokenizer &t) {
     StxBlock *thenb = parse_stmts(t, is_fi_or_elif_or_else);
     vector<pair<StxExpr *, StxBlock *>> elifs;
     optional<StxBlock *> elseb;
-    if (t.peek_keyword("fi")) {
-      t.consume_keyword("fi");
-      return new StxIf(cond, thenb, elifs, elseb);
-    } else {
-      while (1) {
-        if (t.peek_keyword("elif")) {
-          t.consume_keyword("elif");
-          StxExpr *e = parse_expr(t);
-          t.consume_keyword("then");
-          StxBlock *b = parse_stmts(t, is_fi_or_elif_or_else);
-          elifs.push_back({e, b});
-          continue;
-        } else if (t.peek_keyword("else")) {
-          elseb = parse_stmts(t, is_fi_or_elif_or_else);
-          t.consume_keyword("fi");
-          break;
-        } else {
-          assert(false && "expected elif/else after a then");
-        }
+    while (1) {
+      if (t.peek_keyword("elif")) {
+        t.consume_keyword("elif");
+        StxExpr *e = parse_expr(t);
+        t.consume_keyword("then");
+        StxBlock *b = parse_stmts(t, is_fi_or_elif_or_else);
+        elifs.push_back({e, b});
+        continue;
+      } else if (t.peek_keyword("else")) {
+        elseb = parse_stmts(t, is_fi_or_elif_or_else);
+        t.consume_keyword("fi");
+        break;
+      } else if (t.peek_keyword("fi")) {
+        t.consume_keyword("fi");
+        break;
+      } else {
+        t.print_span(t.peek_raw().span);
+        assert(false && "expected elif/else/fi after a then");
       }
     }
     return new StxIf(cond, thenb, elifs, elseb);
