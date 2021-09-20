@@ -612,6 +612,17 @@ public:
   virtual void print(std::ostream &o) const = 0;
 };
 
+class StxBool : public StxExpr {
+public:
+  StxBool(bool value) : value(value) {}
+  void print(std::ostream &o) const {
+    o << (value ? "true" : "false");
+  }
+private:
+  bool value;
+};
+
+
 class StxFnCall : public StxExpr {
 public:
   StxFnCall(Token name, std::vector<StxExpr *> args) : name(name), args(args){};
@@ -973,7 +984,13 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
 // variable (4.8) or function call (4.11) or string or function defn
 StxExpr *parse_expr_leaf(Tokenizer &t) {
   std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
-  if (t.peek_keyword("not")) {
+  if (t.peek_keyword("true")) {
+    t.consume_keyword("true");
+    return new StxBool(true);
+  } else if (t.peek_keyword("false")) {
+    t.consume_keyword("false");
+    return new StxBool(false);
+  } else if (t.peek_keyword("not")) {
     t.consume_keyword("not");
       StxExpr *e = parse_expr(t);
       return new StxNot(e);
