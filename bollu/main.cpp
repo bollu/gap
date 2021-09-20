@@ -255,8 +255,12 @@ struct Tokenizer {
 
   Token consume_identifier() {
     Token t = consume();
-    assert(t.kind == Token::Kind::TOK_IDENTIFIER);
-    return t;
+    if(t.kind == Token::Kind::TOK_IDENTIFIER) {
+      return t;
+    }
+    this->print_span(t.span);
+    cerr << "Expected identifer.\n";
+    assert(false && "found incorrect identifier");
   }
 
   Token consume_string() {
@@ -358,7 +362,7 @@ struct Tokenizer {
         squiggle += i == span.begin.si ? '^' : i == span.end.si ? '^' : i >= span.begin.si && i <= span.end.si ? '~' : ' ';
         cerr << data[i];
       }
-      printf("\n%4d>%s\n", span.begin.line, squiggle.c_str());
+      printf("\n%4d>%s", span.begin.line, squiggle.c_str());
     } else if (nlines <= 4) {
 
       cerr << ">";
@@ -627,13 +631,24 @@ class StxFnDefn : public StxExpr {
 
 StxExpr *parse_expr_leaf(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
+StxExpr *parse_expr_compare(Tokenizer &t);
 StxStmt *parse_stmt(Tokenizer &t);
 
 // expressions (4.7)
 StxExpr *parse_expr(Tokenizer &t) { 
-  std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
-  return parse_expr_leaf(t);
+  return parse_expr_compare(t);
 }
+
+StxExpr *parse_expr_compare(Tokenizer &t) {
+  StxExpr *l = parse_expr_leaf(t);
+  if (t.peek_symbol("=")) {
+    Token sym = t.consume_symbol("=");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, sym, r);
+  } else {
+    return l;
+  }
+};
 
 // 4.11
 // parse expressions delimited by sl, sr
