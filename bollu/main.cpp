@@ -809,7 +809,7 @@ public:
 };
 
 
-// expr -> expr_logical[and, or] -> expr_compare[>=, <=] -> expr_index["expr[index]"] -> expr_leaf
+// expr -> expr_logical[and, or] -> expr_compare[>=, <=] -> expr_arith[+, -] -> expr_index["expr[index]"] -> expr_leaf
 StxExpr *parse_expr_leaf(Tokenizer &t);
 StxExpr *parse_expr_index(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
@@ -852,8 +852,23 @@ StxExpr *parse_expr_index(Tokenizer &t) {
   }
 }
 
-StxExpr *parse_expr_compare(Tokenizer &t) {
+StxExpr *parse_expr_arith(Tokenizer &t) {
   StxExpr *l = parse_expr_index(t);
+  if (t.peek_symbol("+")) {
+    Token sym = t.consume_symbol("+");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, sym, r);
+  } else if (t.peek_keyword("mod")) {
+    Token sym = t.consume_keyword("mod");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, sym, r);
+  } else {
+    return l;
+  }
+}
+
+StxExpr *parse_expr_compare(Tokenizer &t) {
+  StxExpr *l = parse_expr_arith(t);
   if (t.peek_symbol("=")) {
     Token sym = t.consume_symbol("=");
     StxExpr *r = parse_expr(t);
