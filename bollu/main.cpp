@@ -873,6 +873,10 @@ StxExpr *parse_expr_compare(Tokenizer &t) {
     Token sym = t.consume_symbol("=");
     StxExpr *r = parse_expr(t);
     return new StxBinop(l, sym, r);
+  } else if (t.peek_symbol("<") ) {
+    Token sym = t.consume_symbol("<");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, sym, r);
   } else {
     return l;
   }
@@ -1002,7 +1006,16 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
 
 StxStmt *parse_assgn_or_procedure_call(Tokenizer &t) {
   std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
-  Token name = t.consume_identifier(); 
+  Token name = [&]() -> Token {
+    // TODO: some keywords behave like functions.
+    // Is it better to keep them like this?
+    if (optional<Token> info = t.peek_keyword("Info")) {
+      t.consume_keyword("Info");
+      return *info;
+    } else {
+      return t.consume_identifier(); 
+    }
+  }();
   if (t.peek_symbol("(")) {
     std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
     return new StxProcedureCall(name, args);
