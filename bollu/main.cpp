@@ -1,3 +1,4 @@
+
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -236,7 +237,7 @@ struct Tokenizer {
 
   Tokenizer(int len, const char *data)
       : len(len), data(data), loc(Loc::beginning_of_file()) {}
-  bool eof() const { return loc.si >= len; }
+  bool peek_eof() {  eat_whitespace(); return loc.si >= len; }
 
   Token consume_symbol(string s) {
     assert(symbols.count(s));
@@ -296,7 +297,7 @@ struct Tokenizer {
   optional<Token> peek_symbol(string sym) {
     assert(symbols.count(sym));
     eat_whitespace();
-    if (eof()) { return {}; }
+    if (peek_eof()) { return {}; }
     const char ccur = *this->peekc();
     if (!is_special(ccur)) { return {}; }
     // we have a symbol
@@ -321,7 +322,7 @@ struct Tokenizer {
 
   optional<Token> peek_string() {
     eat_whitespace();
-    if (eof()) { return {}; }
+    if (peek_eof()) { return {}; }
 
     const char ccur = *this->peekc();
     cerr << "\n\tpeeking string: " << ccur << "\n";
@@ -344,8 +345,8 @@ struct Tokenizer {
 
   optional<Token> peek_identifier() {
     eat_whitespace();
-    if (eof()) {
-      return Token(Span(loc, loc), Token::Kind::TOK_EOF, "");
+    if (peek_eof()) {
+      return {};
     }
     const char ccur = *this->peekc();
     if (is_special(ccur)) { return {}; }
@@ -369,8 +370,8 @@ struct Tokenizer {
   optional<Token> peek_keyword(string kwd) {
     assert(keywords.count(kwd));
     eat_whitespace();
-    if (eof()) {
-      return Token(Span(loc, loc), Token::Kind::TOK_EOF, "");
+    if (peek_eof()) {
+      return {};
     }
     const char ccur = *this->peekc();
     if (is_special(ccur)) { return {}; }
@@ -466,6 +467,7 @@ struct Tokenizer {
   }
 
   void print_loc(Loc l) const {
+    if (l.si >= this->len) { printf("\n%4d>EOF", l.line); return; }
     cerr << "\n===\n";
     int i = l.si;
     for (; i >= 1 && data[i - 1] != '\n'; i--) {}
@@ -729,17 +731,18 @@ public:
   virtual void print(std::ostream &o, int indent) const = 0;
 };
 
+// TODO, HACK: currently parse anything as the LHS, actually should be a subset of expressions called lvalue, perhaps?
 class StxAssign : public StxStmt {
 public:
-  StxAssign(Token lhs, StxExpr *rhs) : lhs(lhs), rhs(rhs){};
+  StxAssign(StxExpr *lhs, StxExpr *rhs) : lhs(lhs), rhs(rhs){};
 
   void print(std::ostream &o, int indent) const {
-    lhs.print(o);
+    lhs->print(o);
     o << " := ";
     rhs->print(o);
     o << "\n";
   }
-  Token lhs;
+  StxExpr *lhs;
   StxExpr *rhs;
 };
 
@@ -852,7 +855,12 @@ public:
 
 
 
-// expr -> expr_logical[and, or] -> expr_compare[>=, <=] -> expr_arith[+, -] -> expr_index["expr[index]"] -> expr_leaf
+// expr -> 
+// expr_logical[and, or] -> 
+// expr_compare[>=, <=] -> 
+// expr_arith[+, -] -> 
+// expr_index["expr[index]"] -> 
+// expr_leaf 
 StxExpr *parse_expr_leaf(Tokenizer &t);
 StxExpr *parse_expr_index(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
@@ -893,10 +901,10 @@ StxExpr *parse_expr(Tokenizer &t) {
 
 // e[e]
 StxExpr *parse_expr_index(Tokenizer &t) {
+
   StxExpr *l = parse_expr_leaf(t);
   if (t.peek_symbol("[")) {
     t.consume_symbol("[");
-    // TODO: multi dimensional?
     StxExpr *ix = parse_expr(t);
     t.consume_symbol("]");
     return new StxIndex(l, ix);
@@ -909,6 +917,10 @@ StxExpr *parse_expr_arith(Tokenizer &t) {
   StxExpr *l = parse_expr_index(t);
   if (t.peek_symbol("+")) {
     Token sym = t.consume_symbol("+");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, sym, r);
+  } else if (t.peek_symbol("-")) {
+    Token sym = t.consume_symbol("-");
     StxExpr *r = parse_expr(t);
     return new StxBinop(l, sym, r);
   } else if (t.peek_keyword("mod")) {
@@ -938,7 +950,6 @@ StxExpr *parse_expr_compare(Tokenizer &t) {
 // 4.11
 // parse expressions delimited by sl, sr
 vector<StxExpr *> parse_exprs_delimited(Tokenizer &t, string sl, string sr) {
-  std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
   // function call
   t.consume_symbol(sl);
 
@@ -1018,8 +1029,8 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
 }
 
 // variable (4.8) or function call (4.11) or string or function defn
+// MUST make progress
 StxExpr *parse_expr_leaf(Tokenizer &t) {
-  std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
   if (t.peek_keyword("true")) {
     t.consume_keyword("true");
     return new StxBool(true);
@@ -1067,11 +1078,11 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
   } else {
     t.print_current_loc();
     assert(false && "unknown expression leaf token");
+    exit(1);
   }
 }
 
 StxStmt *parse_assgn_or_procedure_call(Tokenizer &t) {
-  std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
   Token name = [&]() -> Token {
     // TODO: some keywords behave like functions.
     // Is it better to keep them like this?
@@ -1082,13 +1093,22 @@ StxStmt *parse_assgn_or_procedure_call(Tokenizer &t) {
       return t.consume_identifier(); 
     }
   }();
+
   if (t.peek_symbol("(")) {
     std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
     return new StxProcedureCall(name, args);
+  } else if (t.peek_symbol("[")) {
+    // <name>[ix] := rhs
+    t.consume_symbol("[");
+    StxExpr *ix = parse_expr(t);
+    t.consume_symbol("]");
+    t.consume_symbol(":=");
+    StxExpr *rhs = parse_expr(t);
+    return new StxAssign(new StxIndex(new StxVar(name), ix), rhs);
   } else if (t.peek_symbol(":=")) {
     t.consume_symbol(":=");
     StxExpr *rhs = parse_expr(t);
-    return new StxAssign(name, rhs);
+    return new StxAssign(new StxVar(name), rhs);
   }
   std::cerr << "unknown toplevel symbol for assign/procedure call:  |";
   t.print_current_loc();
@@ -1100,7 +1120,6 @@ StxStmt *parse_stmt(Tokenizer &t);
 
 template <typename Token2Bool>
 StxBlock *parse_stmts(Tokenizer &t, Token2Bool isEnd) {
-  std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
   vector<StxStmt *> stmts;
   while (1) {
     // std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
@@ -1193,5 +1212,5 @@ int main(int argc, char **argv) {
   fread(where, sizeof(char), len, f);
   Tokenizer t(len, where);
   StxBlock *toplevel =
-      parse_stmts(t, [](Tokenizer &t) -> bool { return t.eof(); });
+      parse_stmts(t, [](Tokenizer &t) -> bool { return t.peek_eof(); });
 }
