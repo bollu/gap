@@ -612,6 +612,7 @@ public:
   virtual void print(std::ostream &o) const = 0;
 };
 
+
 class StxBool : public StxExpr {
 public:
   StxBool(bool value) : value(value) {}
@@ -810,7 +811,18 @@ public:
         vector<pair<StxExpr *, StxBlock *>> elifs, optional<StxBlock *> elseb)
       : cond(cond), thenb(thenb), elifs(elifs), elseb(elseb){};
 
-  void print(std::ostream &o, int indent) const {}
+  void print(std::ostream &o, int indent) const {
+    o << "if "; cond->print(o); o << "then\n";
+    thenb->print(o, indent+1);
+    for (int i = 0; i < elifs.size(); ++i) {
+      o << "elif "; elifs[i].first->print(o);  o << "then\n";
+      elifs[i].second->print(o, indent+1);
+    }
+    if (elseb) {
+      o << "else "; (*elseb)->print(o, indent+1);
+    }
+    o << "fi\n";
+  }
 };
 
 class StxReturn : public StxStmt {
@@ -825,6 +837,20 @@ public:
   }
 };
 
+class StxFor : public StxStmt {
+public:
+  Token lhs;
+  StxExpr *rhs;
+  StxBlock *body;
+
+  StxFor(Token lhs, StxExpr *rhs, StxBlock *body) : lhs(lhs), rhs(rhs), body(body) {}
+  void print(std::ostream &o, int indent) const {
+    o << "for " << lhs.str << " in "; rhs->print(o); o << "\n";
+    body->print(o, indent+1);
+  }
+};
+
+
 
 // expr -> expr_logical[and, or] -> expr_compare[>=, <=] -> expr_arith[+, -] -> expr_index["expr[index]"] -> expr_leaf
 StxExpr *parse_expr_leaf(Tokenizer &t);
@@ -832,6 +858,10 @@ StxExpr *parse_expr_index(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
 StxExpr *parse_expr_compare(Tokenizer &t);
 StxStmt *parse_stmt(Tokenizer &t);
+
+// list-expr -> expr
+StxExpr *parse_list_expr(Tokenizer &t);
+
 template<typename Token2Bool>
 StxBlock *parse_stmts(Tokenizer &t, Token2Bool isEnd);
 
@@ -849,6 +879,12 @@ StxExpr *parse_expr_logical(Tokenizer &t) {
     return l;
   }
 };
+
+
+// 21. ranges https://www.gap-system.org/Manuals/doc/ref/chap21.html#X79596BDE7CAF8491
+StxExpr *parse_list_expr(Tokenizer &t) {
+  return parse_expr(t);
+}
 
 // expressions (4.7)
 StxExpr *parse_expr(Tokenizer &t) { 
@@ -1089,6 +1125,7 @@ StxStmt *parse_stmt(Tokenizer &t) {
   const auto is_fi_or_elif_or_else = [](Tokenizer &t) -> bool {
     return bool(t.peek_keyword("fi")) || bool(t.peek_keyword("else")) || bool(t.peek_keyword("elif"));
   };
+
   if (t.peek_keyword("if")) {
     t.consume_keyword("if");
     StxExpr *cond = parse_expr(t);
@@ -1118,12 +1155,24 @@ StxStmt *parse_stmt(Tokenizer &t) {
       }
     }
     return new StxIf(cond, thenb, elifs, elseb);
-
   } 
   else if (t.peek_keyword("return")) {
     t.consume_keyword("return");
     StxExpr *e = parse_expr(t);
     return new StxReturn(e);
+  } else if (t.peek_keyword("for")) {
+    t.consume_keyword("for");
+    // for simple-var in list-expr do statements od;
+    Token var = t.consume_identifier();
+    t.consume_keyword("in");
+    StxExpr *e = parse_list_expr(t);
+    t.consume_keyword("do");
+    StxBlock *stmts = parse_stmts(t, [](Tokenizer &t) -> bool{
+        return bool(t.peek_keyword("od"));
+        });
+    t.consume_keyword("od");
+    return new StxFor(var, e, stmts);
+
   } else {
     return parse_assgn_or_procedure_call(t);
   }
