@@ -201,8 +201,6 @@ bool is_special(char c) {
          c == '}' || c == '!';
 }
 
-bool is_keyword(string s) { return keywords.count(s); }
-
 bool is_whitespace(char c) { return c == ' ' || c == '\t' || c == '\n'; }
 
 struct Token {
@@ -245,9 +243,14 @@ struct Tokenizer {
   Token consume_keyword(string s) {
     assert(keywords.count(s));
     Token t = consume();
+
+    if (t.kind == Token::Kind::TOK_KEYWORD && t.str == s) { return t; };
+
+    this->print_span(t.span);
+    cerr << "Expected keyword |" << s << "|\n";
     assert(t.kind == Token::Kind::TOK_KEYWORD);
     assert(t.str == s);
-    return t;
+    assert(false && "found incorrect keyword");
   }
 
   Token consume_identifier() {
@@ -314,7 +317,7 @@ struct Tokenizer {
         lend = lend.next(c);
       }
       const Span span(loc, lend);
-      if (is_keyword(s)) {
+      if (keywords.count(s)) {
         return Token(span, Token::Kind::TOK_KEYWORD, s);
       } else {
         return Token(span, Token::Kind::TOK_IDENTIFIER, s);
@@ -350,11 +353,12 @@ struct Tokenizer {
     const int nlines = span.end.line - span.begin.line+1;
     if (span.begin.line == span.end.line) {
       string squiggle;
+      printf("%4d>", span.begin.line);
       for (; data[i] != '\0' && i < span.end.si; ++i) {
         squiggle += i == span.begin.si ? '^' : i == span.end.si ? '^' : i >= span.begin.si && i <= span.end.si ? '~' : ' ';
         cerr << data[i];
       }
-      cerr << "\n" << squiggle << "\n";
+      printf("\n%4d>%s\n", span.begin.line, squiggle.c_str());
     } else if (nlines <= 4) {
 
       cerr << ">";
@@ -406,7 +410,7 @@ struct Tokenizer {
       printf("\n%4d>%s\n", span.end.line, squiggle.c_str());
 
     }
-    cerr << "\nSource file [" << span.begin << ":" << span.end << "]\n ";
+    cerr << "\nSource file [" << span.begin << ":" << span.end << "]\n";
   }
 
   void print_loc(Loc l) const {
@@ -479,6 +483,9 @@ private:
 
 // SYNTAX
 // ======
+
+class StxExpr;
+class StxStmt;
 
 class StxExpr {
 public:
@@ -595,8 +602,32 @@ public:
   vector<StxExpr *> args;
 };
 
+
+class StxFnDefn : public StxExpr {
+  public:
+    StxFnDefn(vector<Token> params, vector<StxStmt *> stmts) : params(params), stmts(stmts) {};
+
+  void print(std::ostream &o) const {
+    o << "function (";
+    for(int i = 0; i < params.size(); ++i){
+      if (i > 0) o << ", ";
+      o << params[i].str;
+    }
+    o << ")\n";
+    for(int i = 0; i < stmts.size(); ++i) {
+      stmts[i]->print(o, 0);
+    }
+    o << "end\n";
+  }
+  private:
+    vector<Token> params;
+    vector<StxStmt *> stmts;
+};
+
+
 StxExpr *parse_expr_leaf(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
+StxStmt *parse_stmt(Tokenizer &t);
 
 // expressions (4.7)
 StxExpr *parse_expr(Tokenizer &t) { 
@@ -633,7 +664,40 @@ vector<StxExpr *> parse_exprs_delimited(Tokenizer &t, string sl, string sr) {
   return args;
 }
 
-// variable (4.8) or function call (4.11);
+StxExpr * parse_fn_defn(Tokenizer &t) {
+  t.consume_keyword("function"); // consume "function"
+
+  // consume function arguments
+  t.consume_symbol("(");
+  vector<Token> params;
+  while(1) {
+    Token param = t.consume_identifier();
+    params.push_back(param);
+    if (t.peek_symbol(")")) { 
+        t.consume_symbol(")");
+        break;
+    }
+    else if (t.peek_symbol(",")) {
+      t.consume_symbol(",");
+      continue;
+    } else {
+      t.print_span(t.peek_raw().span);
+      cerr << "Expected , or ) in function definition argument list\n";
+      assert(false && "unknown symbol in function definition argument list");
+    }
+  }
+
+  // done parsng function params. now parse statements.
+  vector<StxStmt *> stmts;
+  while(!t.peek_keyword("end")) {
+    StxStmt *stmt = parse_stmt(t);
+    stmts.push_back(stmt);
+  }
+  t.consume_keyword("end");
+  return new StxFnDefn(params, stmts);
+}
+
+// variable (4.8) or function call (4.11) or string or function defn
 StxExpr *parse_expr_leaf(Tokenizer &t) {
   std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
   Token p = t.peek_raw();
@@ -652,6 +716,8 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
     t.print_span(p.span);
     vector<StxExpr *> args = parse_exprs_delimited(t, "[", "]");
     return new StxList(args);
+  }  else if (p.kind == Token::Kind::TOK_KEYWORD && p.str == "function") {
+    return parse_fn_defn(t);
   } else {
     t.print_span(p.span);
     assert(false && "unknown expression leaf token");
@@ -729,6 +795,7 @@ StxStmt *parse_stmt(Tokenizer &t) {
            (t.str == "fi" || t.str == "else" || t.str == "elif");
   };
   if (t.peek_keyword("if")) {
+    t.consume_keyword("if");
     StxExpr *cond = parse_expr(t);
     t.consume_keyword("then");
     StxBlock *thenb = parse_stmts(t, is_fi_or_elif_or_else);
