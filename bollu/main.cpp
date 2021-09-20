@@ -60,6 +60,10 @@ struct Doc {
     INDENTED,
   };
   const Kind kind;
+  static void newline(ostream &o, int indent) {
+    o << "\n";
+    for(int i = 0; i < indent; ++i) { o << " "; }
+  }
 
   void print(ostream &o, int indent = 0) {
     if (kind == Kind::RAW) {
@@ -1213,4 +1217,7 @@ int main(int argc, char **argv) {
   Tokenizer t(len, where);
   StxBlock *toplevel =
       parse_stmts(t, [](Tokenizer &t) -> bool { return t.peek_eof(); });
+
+  cerr << "\n###PARSED###\n";
+  toplevel->print(cerr, 0);
 }
