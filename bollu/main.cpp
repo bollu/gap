@@ -250,7 +250,7 @@ struct Tokenizer {
     cerr << "Expected keyword |" << s << "|\n";
     assert(t.kind == Token::Kind::TOK_KEYWORD);
     assert(t.str == s);
-    assert(false && "found incorrect keyword");
+    assert(false && "did not find expected keyword.");
   }
 
   Token consume_identifier() {
@@ -260,7 +260,7 @@ struct Tokenizer {
     }
     this->print_span(t.span);
     cerr << "Expected identifer.\n";
-    assert(false && "found incorrect identifier");
+    assert(false && "did not find expected identifier.");
   }
 
   Token consume_string() {
@@ -358,7 +358,7 @@ struct Tokenizer {
     if (span.begin.line == span.end.line) {
       string squiggle;
       printf("%4d>", span.begin.line);
-      for (; data[i] != '\0' && i < span.end.si; ++i) {
+      for (; data[i] != '\0' && data[i] != '\n'; ++i) {
         squiggle += i == span.begin.si ? '^' : i == span.end.si ? '^' : i >= span.begin.si && i <= span.end.si ? '~' : ' ';
         cerr << data[i];
       }
@@ -490,6 +490,7 @@ private:
 
 class StxExpr;
 class StxStmt;
+class StxBlock;
 
 class StxExpr {
 public:
@@ -609,7 +610,7 @@ public:
 
 class StxFnDefn : public StxExpr {
   public:
-    StxFnDefn(vector<Token> params, vector<StxStmt *> stmts) : params(params), stmts(stmts) {};
+    StxFnDefn(vector<Token> params, StxBlock *stmts) : params(params), stmts(stmts) {};
 
   void print(std::ostream &o) const {
     o << "function (";
@@ -618,14 +619,12 @@ class StxFnDefn : public StxExpr {
       o << params[i].str;
     }
     o << ")\n";
-    for(int i = 0; i < stmts.size(); ++i) {
-      stmts[i]->print(o, 0);
-    }
+    o << "TODO: print statements\n";
     o << "end\n";
   }
   private:
     vector<Token> params;
-    vector<StxStmt *> stmts;
+    StxBlock *stmts;
 };
 
 
@@ -633,6 +632,8 @@ StxExpr *parse_expr_leaf(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
 StxExpr *parse_expr_compare(Tokenizer &t);
 StxStmt *parse_stmt(Tokenizer &t);
+template<typename Token2Bool>
+StxBlock *parse_stmts(Tokenizer &t, Token2Bool isEnd);
 
 // expressions (4.7)
 StxExpr *parse_expr(Tokenizer &t) { 
@@ -703,11 +704,7 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
   }
 
   // done parsng function params. now parse statements.
-  vector<StxStmt *> stmts;
-  while(!t.peek_keyword("end")) {
-    StxStmt *stmt = parse_stmt(t);
-    stmts.push_back(stmt);
-  }
+  StxBlock *stmts = parse_stmts(t, [](Token t) { return t.kind == Token::Kind::TOK_KEYWORD && t.str == "end"; });
   t.consume_keyword("end");
   return new StxFnDefn(params, stmts);
 }
@@ -745,7 +742,6 @@ StxStmt *parse_assgn_or_procedure_call(Tokenizer &t) {
   Token name = t.consume_identifier(); // todo: generalize to lvalue.
   if (t.peek_symbol("(")) {
     std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
-    t.consume_symbol(";");
     return new StxProcedureCall(name, args);
   } else if (t.peek_symbol(":=")) {
     StxExpr *rhs = parse_expr(t);
@@ -775,16 +771,20 @@ StxBlock *parse_stmts(Tokenizer &t, Token2Bool isEnd) {
   std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
   vector<StxStmt *> stmts;
   while (1) {
-    std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
+    cerr << "parsing statements, currently at: ";
+    t.print_span(t.peek_raw().span);
+    // std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
     if (isEnd(t.peek_raw())) {
-      std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
+      // std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
       break;
     } else {
-      std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
+      // std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
       stmts.push_back(parse_stmt(t));
+      // TODO: does this belong to parse_stmt?
+      t.consume_symbol(";");
     }
   }
-  std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
+  // std::cerr << "\t" << __PRETTY_FUNCTION__ << "|" << __LINE__ << endl;
   return new StxBlock(stmts);
 };
 
@@ -800,6 +800,18 @@ public:
       : cond(cond), thenb(thenb), elifs(elifs), elseb(elseb){};
 
   void print(std::ostream &o, int indent) const {}
+};
+
+class StxReturn : public StxStmt {
+public:
+  StxExpr *e;
+  StxReturn(StxExpr *e) : e(e) {}
+
+  void print(std::ostream &o, int indent) const {
+    o << "return ";
+    e->print(o);
+    o << "\n";
+  }
 };
 
 // Statement(4.14)
@@ -819,24 +831,31 @@ StxStmt *parse_stmt(Tokenizer &t) {
     if (t.peek_keyword("fi")) {
       t.consume_keyword("fi");
       return new StxIf(cond, thenb, elifs, elseb);
-    }
-    while (1) {
-      if (t.peek_keyword("elif")) {
-        StxExpr *e = parse_expr(t);
-        t.consume_keyword("then");
-        StxBlock *b = parse_stmts(t, is_fi_or_elif_or_else);
-        elifs.push_back({e, b});
-        continue;
-      } else if (t.peek_keyword("else")) {
-        elseb = parse_stmts(t, is_fi_or_elif_or_else);
-        t.consume_keyword("fi");
-        break;
-      } else {
-        assert(false && "expected elif/else after a then");
+    } else {
+      while (1) {
+        if (t.peek_keyword("elif")) {
+          t.consume_keyword("elif");
+          StxExpr *e = parse_expr(t);
+          t.consume_keyword("then");
+          StxBlock *b = parse_stmts(t, is_fi_or_elif_or_else);
+          elifs.push_back({e, b});
+          continue;
+        } else if (t.peek_keyword("else")) {
+          elseb = parse_stmts(t, is_fi_or_elif_or_else);
+          t.consume_keyword("fi");
+          break;
+        } else {
+          assert(false && "expected elif/else after a then");
+        }
       }
     }
     return new StxIf(cond, thenb, elifs, elseb);
 
+  } 
+  else if (t.peek_keyword("return")) {
+    t.consume_keyword("return");
+    StxExpr *e = parse_expr(t);
+    return new StxReturn(e);
   } else {
     return parse_assgn_or_procedure_call(t);
   }
