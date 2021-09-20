@@ -966,6 +966,7 @@ StxStmt *parse_assgn_or_procedure_call(Tokenizer &t) {
     std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
     return new StxProcedureCall(name, args);
   } else if (t.peek_symbol(":=")) {
+    t.consume_symbol(":=");
     StxExpr *rhs = parse_expr(t);
     return new StxAssign(name, rhs);
   }
