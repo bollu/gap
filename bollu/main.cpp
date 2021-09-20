@@ -807,6 +807,10 @@ StxExpr *parse_expr_logical(Tokenizer &t) {
     Token and_ = t.consume_keyword("and");
     StxExpr *r = parse_expr(t);
     return new StxBinop(l, and_, r);
+  } else if (t.peek_keyword("or")) {
+    Token or_ = t.consume_keyword("or");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, or_, r);
   } else {
     return l;
   }
@@ -913,7 +917,6 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
     // this is sugar for
     //   function ( arg-list ) return expr; end.
     if (t.peek_symbol("->")) {
-      assert(false && "found symbol ->");
       t.consume_symbol("->");
       StxExpr *rhs = parse_expr(t);
       return new StxFnDefn({*ident}, new StxBlock({new StxReturn(rhs)}));
