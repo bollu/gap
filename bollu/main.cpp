@@ -247,7 +247,6 @@ struct Tokenizer {
   Token consume_keyword(string s) {
     assert(keywords.count(s));
     optional<Token> t = peek_keyword(s);
-    assert(t); 
     if (t) {
       assert(this->loc == t->span.begin);
       this->loc = t->span.end;
@@ -639,6 +638,18 @@ public:
   void print(std::ostream &o) const { str.print(o); }
 };
 
+class StxNot : public StxExpr {
+public:
+  StxNot(StxExpr *e) : e(e) {}
+  StxExpr *e;
+
+  void print(std::ostream &o) const {
+    o << "not ";
+    e->print(o);
+  }
+};
+
+
 
 class StxBinop : public StxExpr {
 public:
@@ -926,7 +937,12 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
 // variable (4.8) or function call (4.11) or string or function defn
 StxExpr *parse_expr_leaf(Tokenizer &t) {
   std::cerr << "\t" << __PRETTY_FUNCTION__ << "\n";
-  if (optional<Token> s = t.peek_string()) {
+  if (t.peek_keyword("not")) {
+    t.consume_keyword("not");
+      StxExpr *e = parse_expr(t);
+      return new StxNot(e);
+
+  } else if (optional<Token> s = t.peek_string()) {
     t.consume_string();
     return new StxStr(*s);
   } else if (optional<Token> ident = t.peek_identifier()) {
@@ -1021,6 +1037,7 @@ StxStmt *parse_stmt(Tokenizer &t) {
         elifs.push_back({e, b});
         continue;
       } else if (t.peek_keyword("else")) {
+        t.consume_keyword("else");
         elseb = parse_stmts(t, is_fi_or_elif_or_else);
         t.consume_keyword("fi");
         break;
