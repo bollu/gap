@@ -191,10 +191,13 @@ const set<std::string> keywords = {
 
 const std::string special = "\"`()*+,-#./:;<=>~[\\]^_{}";
 
+// why is "..." not a symbol?
 const set<std::string> symbols = {"+",  "-",  "*",  "/",  "^", "~",  "!.",
                                   "=",  "<>", "<",  "<=", ">", ">=", "![",
                                   ":=", ".",  "..", "->", ",", ";",  "!{",
-                                  "[",  "]",  "{",  "}",  "(", ")",  ":"};
+                                  "[",  "]",  "{",  "}",  "(", ")",  ":",
+                                  "..." // TODO: check if I misunderstood something.
+};
 
 bool is_special(char c) {
   return c == '"' || c == '`' || c == '(' || c == ')' || c == '*' || c == '+' ||
@@ -353,7 +356,7 @@ struct Tokenizer {
         break;
       }
       const char c = data[lend.si];
-      if (is_whitespace(c) || is_special(c)) {
+      if (is_whitespace(c) || (c != '_' && is_special(c))) {
         break;
       }
       s += data[lend.si];
@@ -751,7 +754,8 @@ public:
 
 class StxFnDefn : public StxExpr {
   public:
-    StxFnDefn(vector<Token> params, vector<Token> locals, StxBlock *stmts) : params(params), locals(locals), stmts(stmts) {};
+    StxFnDefn(vector<Token> params, bool vararg, 
+        vector<Token> locals, StxBlock *stmts) : params(params), vararg(vararg), locals(locals), stmts(stmts) {};
 
   void print(std::ostream &o) const {
     o << "function (";
@@ -759,12 +763,14 @@ class StxFnDefn : public StxExpr {
       if (i > 0) o << ", ";
       o << params[i].str;
     }
+    if (vararg) { o << "..."; }
     o << ")\n";
     o << "TODO: print statements\n";
     o << "end\n";
   }
   private:
     vector<Token> params;
+    bool vararg;
     vector<Token> locals;
     StxBlock *stmts;
 };
@@ -915,6 +921,7 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
   t.consume_keyword("function"); // consume "function"
 
   t.consume_symbol("(");
+  bool vararg = false;
   vector<Token> params;
   while(1) {
     Token param = t.consume_identifier();
@@ -926,6 +933,11 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
     else if (t.peek_symbol(",")) {
       t.consume_symbol(",");
       continue;
+    } else if (t.peek_symbol("...")) {
+      t.consume_symbol("...");
+      t.consume_symbol(")");
+      vararg = true;
+      break;
     } else {
       t.print_current_loc();
       cerr << "Expected , or ) in function definition argument list\n";
@@ -955,7 +967,7 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
   // done parsng function params. now parse statements.
   StxBlock *stmts = parse_stmts(t, [](Tokenizer &t) -> bool { return bool(t.peek_keyword("end")); });
   t.consume_keyword("end");
-  return new StxFnDefn(params, locals, stmts);
+  return new StxFnDefn(params, vararg, locals, stmts);
 }
 
 // variable (4.8) or function call (4.11) or string or function defn
@@ -981,7 +993,8 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
       StxExpr *rhs = parse_expr(t);
       const vector<Token> params= {*ident};
       const vector<Token> locals;
-      return new StxFnDefn(params, locals, new StxBlock({new StxReturn(rhs)}));
+      const bool vararg = false;
+      return new StxFnDefn(params, vararg, locals, new StxBlock({new StxReturn(rhs)}));
     } else if (t.peek_symbol("(")) {
       std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
       return new StxFnCall(*ident, args);
