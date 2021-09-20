@@ -549,7 +549,24 @@ public:
   }
 };
 
+// l[ix]
+class StxIndex : public StxExpr {
+public:
+  StxIndex(StxExpr *e, StxExpr *index) : e(e), index(index) {}
+  StxExpr *e;
+  StxExpr *index;
 
+  void print(std::ostream &o) const {
+    e->print(o);
+    o << "[";
+    index->print(o);
+    o << "]";
+  }
+};
+
+
+
+// [a, b, c]
 class StxList : public StxExpr {
   public:
   StxList(vector<StxExpr *> args) : args(args) {};
@@ -628,7 +645,9 @@ class StxFnDefn : public StxExpr {
 };
 
 
+// expr -> expr_compare -> -> expr_leaf
 StxExpr *parse_expr_leaf(Tokenizer &t);
+StxExpr *parse_expr_index(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
 StxExpr *parse_expr_compare(Tokenizer &t);
 StxStmt *parse_stmt(Tokenizer &t);
@@ -640,8 +659,22 @@ StxExpr *parse_expr(Tokenizer &t) {
   return parse_expr_compare(t);
 }
 
-StxExpr *parse_expr_compare(Tokenizer &t) {
+// e[e]
+StxExpr *parse_expr_index(Tokenizer &t) {
   StxExpr *l = parse_expr_leaf(t);
+  if (t.peek_symbol("[")) {
+    t.consume_symbol("[");
+    // TODO: multi dimensional?
+    StxExpr *ix = parse_expr(t);
+    t.consume_symbol("]");
+    return new StxIndex(l, ix);
+  } else {
+    return l;
+  }
+}
+
+StxExpr *parse_expr_compare(Tokenizer &t) {
+  StxExpr *l = parse_expr_index(t);
   if (t.peek_symbol("=")) {
     Token sym = t.consume_symbol("=");
     StxExpr *r = parse_expr(t);
@@ -733,7 +766,6 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
   } else {
     t.print_span(p.span);
     assert(false && "unknown expression leaf token");
-
   }
 }
 
