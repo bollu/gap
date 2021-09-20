@@ -8,11 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <strings.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <tuple>
+#include <type_traits>
 #include <unistd.h>
 #include <unordered_map>
 #include <utility>
@@ -615,14 +617,14 @@ class StxBlock;
 
 class StxExpr {
 public:
-  virtual void print(std::ostream &o) const = 0;
+  virtual void print(std::ostream &o, int indent) const = 0;
 };
 
 
 class StxBool : public StxExpr {
 public:
   StxBool(bool value) : value(value) {}
-  void print(std::ostream &o) const {
+  void print(std::ostream &o, int indent) const {
     o << (value ? "true" : "false");
   }
 private:
@@ -635,14 +637,14 @@ public:
   StxFnCall(Token name, std::vector<StxExpr *> args) : name(name), args(args){};
   Token name;
   std::vector<StxExpr *> args;
-  void print(std::ostream &o) const {
+  void print(std::ostream &o, int indent) const {
     name.print(o);
     o << "(";
     for (int i = 0; i < args.size(); ++i) {
       if (i > 0) {
         o << ",";
       }
-      args[i]->print(o);
+      args[i]->print(o, indent);
     }
     o << ")";
   }
@@ -653,7 +655,7 @@ public:
   StxVar(Token name) : name(name){};
   const Token name;
 
-  void print(std::ostream &o) const { name.print(o); }
+  void print(std::ostream &o, int indent) const { name.print(o); }
 };
 
 class StxStr : public StxExpr {
@@ -661,7 +663,7 @@ public:
   StxStr(Token str) : str(str){};
   const Token str;
 
-  void print(std::ostream &o) const { str.print(o); }
+  void print(std::ostream &o, int indent) const { str.print(o); }
 };
 
 class StxNot : public StxExpr {
@@ -669,9 +671,9 @@ public:
   StxNot(StxExpr *e) : e(e) {}
   StxExpr *e;
 
-  void print(std::ostream &o) const {
+  void print(std::ostream &o, int indent) const {
     o << "not ";
-    e->print(o);
+    e->print(o, indent);
   }
 };
 
@@ -685,12 +687,12 @@ public:
   StxExpr *right;
   Token symbol;
 
-  void print(std::ostream &o) const {
-    left->print(o);
+  void print(std::ostream &o, int indent) const {
+    left->print(o, indent);
     o << " ";
     symbol.print(o);
     o << " ";
-    right->print(o);
+    right->print(o, indent);
   }
 };
 
@@ -701,10 +703,10 @@ public:
   StxExpr *e;
   StxExpr *index;
 
-  void print(std::ostream &o) const {
-    e->print(o);
+  void print(std::ostream &o, int indent) const {
+    e->print(o, indent);
     o << "[";
-    index->print(o);
+    index->print(o, indent);
     o << "]";
   }
 };
@@ -717,11 +719,11 @@ class StxList : public StxExpr {
   StxList(vector<StxExpr *> args) : args(args) {};
 
 
-  void print(std::ostream &o) const {
+  void print(std::ostream &o, int indent) const {
     o << "[";
     for(int i = 0; i < args.size(); ++i){
       if (i > 0) o << ", ";
-      args[i]->print(o);
+      args[i]->print(o, indent);
     }
     o << "]";
   }
@@ -741,9 +743,9 @@ public:
   StxAssign(StxExpr *lhs, StxExpr *rhs) : lhs(lhs), rhs(rhs){};
 
   void print(std::ostream &o, int indent) const {
-    lhs->print(o);
+    lhs->print(o, indent);
     o << " := ";
-    rhs->print(o);
+    rhs->print(o, indent);
     o << "\n";
   }
   StxExpr *lhs;
@@ -762,36 +764,12 @@ public:
       if (i > 0) {
         o << ", ";
       }
-      args[i]->print(o);
+      args[i]->print(o, indent);
     }
     o << ")";
   }
   Token name;
   vector<StxExpr *> args;
-};
-
-
-class StxFnDefn : public StxExpr {
-  public:
-    StxFnDefn(vector<Token> params, bool vararg, 
-        vector<Token> locals, StxBlock *stmts) : params(params), vararg(vararg), locals(locals), stmts(stmts) {};
-
-  void print(std::ostream &o) const {
-    o << "function (";
-    for(int i = 0; i < params.size(); ++i){
-      if (i > 0) o << ", ";
-      o << params[i].str;
-    }
-    if (vararg) { o << "..."; }
-    o << ")\n";
-    o << "TODO: print statements\n";
-    o << "end\n";
-  }
-  private:
-    vector<Token> params;
-    bool vararg;
-    vector<Token> locals;
-    StxBlock *stmts;
 };
 
 // TODO: consider removing this and directly storing vector of statements.
@@ -800,12 +778,57 @@ public:
   vector<StxStmt *> stmts;
   StxBlock(vector<StxStmt *> stmts) : stmts(stmts) {}
   void print(std::ostream &o, int indent) const {
+    indent += 1;
     for (int i = 0; i < stmts.size(); ++i) {
       stmts[i]->print(o, indent);
-      o << "\n";
+      o << ";";
+      Doc::newline(o, indent);
     }
   }
 };
+
+
+
+class StxFnDefn : public StxExpr {
+  public:
+    StxFnDefn(vector<Token> params, bool vararg, 
+        vector<Token> locals, StxBlock *stmts) : params(params), vararg(vararg), locals(locals), stmts(stmts) {};
+
+  void print(std::ostream &o, int indent) const {
+    o << "function (";
+    for(int i = 0; i < params.size(); ++i){
+      if (i > 0) o << ", ";
+      o << params[i].str;
+    }
+    if (vararg) { o << "..."; }
+    o << ")";
+    indent += 1;
+
+    Doc::newline(o, indent);
+    if (locals.size() > 0) {
+      o << "local ";
+      for(int i = 0; i < locals.size(); ++i) {
+        if (i > 0) { o << ", "; }
+        o << locals[i].str;
+      }
+      o << ";"; 
+      Doc::newline(o, indent);
+    }
+
+    stmts->print(o, indent);
+    Doc::newline(o, indent);
+    o << "end";
+    indent -= 1;
+    Doc::newline(o, indent);
+
+  }
+  private:
+    vector<Token> params;
+    bool vararg;
+    vector<Token> locals;
+    StxBlock *stmts;
+};
+
 
 class StxIf : public StxStmt {
 public:
@@ -819,16 +842,23 @@ public:
       : cond(cond), thenb(thenb), elifs(elifs), elseb(elseb){};
 
   void print(std::ostream &o, int indent) const {
-    o << "if "; cond->print(o); o << "then\n";
+    o << "if "; cond->print(o, indent+1); o << " then";
+    Doc::newline(o, indent+1);
     thenb->print(o, indent+1);
     for (int i = 0; i < elifs.size(); ++i) {
-      o << "elif "; elifs[i].first->print(o);  o << "then\n";
+      Doc::newline(o, indent);
+      o << " elif "; elifs[i].first->print(o, indent+1);  o << " then";
+      Doc::newline(o, indent+1);
       elifs[i].second->print(o, indent+1);
     }
     if (elseb) {
-      o << "else "; (*elseb)->print(o, indent+1);
+      Doc::newline(o, indent);
+      o << " else ";
+      Doc::newline(o, indent+1);
+      (*elseb)->print(o, indent+1);
     }
-    o << "fi\n";
+    Doc::newline(o, indent);
+    o << " fi";
   }
 };
 
@@ -839,8 +869,7 @@ public:
 
   void print(std::ostream &o, int indent) const {
     o << "return ";
-    e->print(o);
-    o << "\n";
+    e->print(o, indent);
   }
 };
 
@@ -852,8 +881,11 @@ public:
 
   StxFor(Token lhs, StxExpr *rhs, StxBlock *body) : lhs(lhs), rhs(rhs), body(body) {}
   void print(std::ostream &o, int indent) const {
-    o << "for " << lhs.str << " in "; rhs->print(o); o << "\n";
+    o << "for " << lhs.str << " in "; rhs->print(o, indent+1); o << " do";
+    Doc::newline(o, indent+1);
     body->print(o, indent+1);
+    Doc::newline(o, indent);
+    o << "od";
   }
 };
 
@@ -1219,5 +1251,5 @@ int main(int argc, char **argv) {
       parse_stmts(t, [](Tokenizer &t) -> bool { return t.peek_eof(); });
 
   cerr << "\n###PARSED###\n";
-  toplevel->print(cerr, 0);
+  toplevel->print(cout, 0);
 }
