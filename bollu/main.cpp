@@ -179,12 +179,15 @@ std::ostream &operator<<(std::ostream &o, const Span &s) {
 }
 
 const set<std::string> keywords = {
-    "Assert", "Info",     "IsBound", "Quit", "break",    "continue",
-    "do",     "elif",     "else",    "end",  "false",    "fi",
-    "for",    "function", "if",      "in",   "local",    "mod",
-    "not",    "od",       "or",      "quit", "readonly", "readwrite",
-    "rec",    "repeat",   "return",  "then", "true",     "until",
-    "while"};
+    "Assert", "Info",     "IsBound", "Quit", 
+    "TryNextMethod", "Unbind", "and", "atomic",
+    "break",    "continue", "do",     "elif",
+    "else",    "end",  "false",    "fi",
+    "for",    "function", "if",      "in",
+    "local",    "mod", "not",    "od",
+    "or",     "quit", "readonly", "readwrite",
+    "rec",    "repeat",   "return",  "then",
+    "true",     "until", "while"};
 
 const std::string special = "\"`()*+,-#./:;<=>~[\\]^_{}";
 
@@ -645,7 +648,7 @@ class StxFnDefn : public StxExpr {
 };
 
 
-// expr -> expr_compare -> -> expr_leaf
+// expr -> expr_logical[and, or] -> expr_compare[>=, <=] -> expr_index["expr[index]"] -> expr_leaf
 StxExpr *parse_expr_leaf(Tokenizer &t);
 StxExpr *parse_expr_index(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
@@ -654,9 +657,20 @@ StxStmt *parse_stmt(Tokenizer &t);
 template<typename Token2Bool>
 StxBlock *parse_stmts(Tokenizer &t, Token2Bool isEnd);
 
+StxExpr *parse_expr_logical(Tokenizer &t) {
+  StxExpr *l = parse_expr_compare(t);
+  if (t.peek_keyword("and")) {
+    Token and_ = t.consume_keyword("and");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, and_, r);
+  } else {
+    return l;
+  }
+};
+
 // expressions (4.7)
 StxExpr *parse_expr(Tokenizer &t) { 
-  return parse_expr_compare(t);
+  return parse_expr_logical(t);
 }
 
 // e[e]
