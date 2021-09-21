@@ -912,7 +912,8 @@ public:
 // expr ->
 // expr_logical[and, or] ->
 // expr_compare[>=, <=] ->
-// expr_arith[+, -] ->
+// expr_arith_add_sub[+, -] ->
+// expr_arith_mul_div[*, /] -> 
 // expr_index["expr[index]"] ->
 // expr_leaf
 StxExpr *parse_expr_leaf(Tokenizer &t);
@@ -1001,9 +1002,19 @@ StxExpr *parse_expr_index(Tokenizer &t) {
     return l;
   }
 }
-
-StxExpr *parse_expr_arith(Tokenizer &t) {
+StxExpr *parse_arith_mul_div(Tokenizer &t) {
   StxExpr *l = parse_expr_index(t);
+  if (t.peek_symbol("/")) {
+    Token sym = t.consume_symbol("/");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, sym, r);
+  } else {
+    return l;
+  }
+}
+
+StxExpr *parse_arith_add_sub_mod(Tokenizer &t) {
+  StxExpr *l = parse_arith_mul_div(t);
   if (t.peek_symbol("+")) {
     Token sym = t.consume_symbol("+");
     StxExpr *r = parse_expr(t);
@@ -1022,7 +1033,7 @@ StxExpr *parse_expr_arith(Tokenizer &t) {
 }
 
 StxExpr *parse_expr_compare(Tokenizer &t) {
-  StxExpr *l = parse_expr_arith(t);
+  StxExpr *l = parse_arith_add_sub_mod(t);
   if (t.peek_symbol("=")) {
     Token sym = t.consume_symbol("=");
     StxExpr *r = parse_expr(t);
