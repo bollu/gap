@@ -57,48 +57,103 @@ int Logger::G_LOG_INDENT = 1;
 // pretty printing doc
 struct Doc {
   enum class Kind {
-    RAW,
-    INDENTED,
+    CONCAT, // concatenation
+    INDENT, // indent instruction.
+    STRING, // raw string.
+    VERTICAL, // a vertically aligned block
   };
   const Kind kind;
-  static void newline(ostream &o, int indent) {
-    o << "\n";
-    for (int i = 0; i < indent; ++i) {
-      o << " ";
-    }
+
+  string str(int width) const {
+    return this->str_(width, width, /*cur_indent=*/true, /*newline=*/false);
   }
 
-  void print(ostream &o, int indent = 0) {
-    if (kind == Kind::RAW) {
-      for (char c : s) {
-        o << c;
-        if (c == '\n') {
-          print_indent(o, indent);
+  void print(ostream &o, int width) const {
+    o << str(width);
+  }
+
+  Doc operator + (const Doc &other) {
+    Doc out(Kind::CONCAT);
+    out.children.push_back(*this); // ouch! do I really want this?
+    out.children.push_back(other);
+    return out;
+  }
+
+  Doc vertical() {
+    Doc out(Kind::VERTICAL); 
+    return out;
+  }
+
+  void addv(const Doc &other) {
+    assert(kind == Kind::VERTICAL);
+    this->children.push_back(other);
+  }
+
+  Doc(string s) : kind(Kind::STRING), s(s) {}
+  Doc indent() {
+    return Doc::indent(*this); // ouch; deep copy!
+  }
+
+  static Doc indent(Doc &other) {
+    Doc out(Kind::INDENT);
+    out.children.push_back(other);
+    return out;
+  }
+
+private:
+  Doc(Kind kind) : kind(kind) {}
+  string s;
+  vector<Doc> children;
+
+  string str_(int total_width, int cur_width, int cur_indent, bool newline) const {
+
+    if (kind == Kind::CONCAT) {
+      string out;
+      for(Doc d : children) {
+        out += d.str_(total_width, total_width - out.size(), cur_indent, newline);
+        newline = false;
+      }
+      return out;
+    } else if (kind == Kind::INDENT) {
+        assert(children.size() == 1);
+        return children[0].str_(total_width, cur_width, cur_indent+2, newline);
+    } else if (kind == Kind::STRING) {
+      string out;
+      if (newline) { out +=  "\n"; }
+      // first character, print indent.
+      if (total_width == cur_width) {
+        for(int i = 0; i < cur_indent; ++i) { out +=  " "; }
+      }
+      out += s;
+      return s;
+    } else if (kind == Kind::VERTICAL) {
+      {
+        string oneline;
+        for(int i = 0; i < children.size(); ++i) {
+          // no new lines
+          oneline += children[i].str_(total_width, cur_width - oneline.size(), cur_indent, false); 
         }
+        if (oneline.size() <= total_width) { return oneline; }
       }
-    } else if (kind == Kind::INDENTED) {
-      indent++;
-      for (Doc *d : children) {
-        d->print(o, indent);
+
+      // okay, oneline didn't work.
+      {
+        string out;
+        for(int i = 0; i < children.size(); ++i) {
+          // every child starts with new line.
+          out += children[i].str_(total_width, cur_width, cur_indent, true); 
+        }
+        return out;
       }
-      indent--;
     } else {
       assert(false && "unknown kind");
     }
   }
-
-  Doc(string s) : s(s), kind(Kind::RAW){};
-
-private:
-  vector<Doc *> children;
-  string s;
-
-  void print_indent(ostream &o, int indent) {
-    for (int i = 0; i < indent; ++i) {
-      o << ' ';
-    }
-  }
 };
+
+ostream &operator << (ostream &o, const Doc &doc) {
+  doc.print(o, 80);
+}
 
 ll hashstr(const char *s, const ll len) {
   const ll p = 53;
