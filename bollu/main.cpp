@@ -618,18 +618,31 @@ public:
 
 class StxPermutation : public StxExpr {
 public:
-  StxPermutation(vector<StxExpr *> es) : es(es){};
-  void print(std::ostream &o, int indent) const {
-    o << "(";
-    for (int i = 0; i < es.size(); ++i) {
-      if (i > 0) {
-        o << ", ";
-      }
-      es[i]->print(o, indent);
-    }
-    o << ")";
+  StxPermutation(vector<vector<StxExpr *>> ees) : ees(ees){
+    // every permutation must have at least one cycle.
+    // this cycle could be empty! So empty permutation () is of the form {{}}.
+    assert(ees.size() >= 1);
+  };
+
+  static StxPermutation *emptyPermutation() {
+    vector<StxExpr *> emptyCycle;
+    return new StxPermutation({emptyCycle});
   }
-  vector<StxExpr *> es;
+
+  void print(std::ostream &o, int indent) const {
+
+    for(vector<StxExpr *> es : ees) {
+      o << "(";
+      for (int i = 0; i < es.size(); ++i) {
+        if (i > 0) {
+          o << ", ";
+        }
+        es[i]->print(o, indent);
+      }
+      o << ")";
+    }
+  }
+  vector<vector<StxExpr *>> ees;
 };
 
 class StxBool : public StxExpr {
@@ -1162,6 +1175,41 @@ StxExpr *parse_fn_defn(Tokenizer &t) {
   return new StxFnDefn(params, vararg, locals, stmts);
 }
 
+// given the first element of the first permutation, create the rest of the permutation.
+// (1, 2, 3, )
+//   ^ 
+//  cursor when calling parse_permutation.
+StxExpr *parse_permutation(StxExpr *first, Tokenizer &t) {
+    vector<StxExpr *> es;
+    es.push_back(first);
+
+    t.consume_symbol(",");
+    while (1) {
+      es.push_back(parse_expr(t));
+      if (t.peek_symbol(")")) {
+        t.consume_symbol(")");
+        break;
+      } else if (t.peek_symbol(",")) {
+        t.consume_symbol(",");
+        continue;
+      } else {
+        t.print_current_loc();
+        cerr << "expected , or ) to continue permutation";
+        assert(false);
+      }
+    }
+    vector<vector<StxExpr *>> ees;
+    ees.push_back(es);
+    while(1) {
+      if (t.peek_symbol("(")) {
+        // parse all cycles.
+        ees.push_back(parse_exprs_delimited(t, "(", ")"));
+      } else {
+        break;
+      }
+    }
+    return new StxPermutation(ees);
+}
 // variable (4.8) or function call (4.11) or string or function defn
 // MUST make progress
 StxExpr *parse_expr_leaf(Tokenizer &t) {
@@ -1218,7 +1266,7 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
     // empty permutation
     if (t.peek_symbol(")")) {
       t.consume_symbol(")");
-      return new StxPermutation({});
+      return StxPermutation::emptyPermutation();
     }
 
     // TODO: ambiguous? can be either (permutation) or (expr)?
@@ -1228,24 +1276,7 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
       return e;
     } else if (t.peek_symbol(",")) {
       // okay, we have a permutation!
-      vector<StxExpr *> es;
-      es.push_back(e);
-
-      t.consume_symbol(",");
-      while (1) {
-        es.push_back(parse_expr(t));
-        if (t.peek_symbol(")")) {
-          t.consume_symbol(")");
-          return new StxPermutation(es);
-        } else if (t.peek_symbol(",")) {
-          t.consume_symbol(",");
-          continue;
-        } else {
-          t.print_current_loc();
-          cerr << "expected , or ) to continue permutation";
-          assert(false);
-        }
-      }
+      return parse_permutation(e, t);
     } else {
       t.print_current_loc();
       cerr << "expected ) to close bracketed expression or , to create "
