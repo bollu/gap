@@ -581,6 +581,16 @@ public:
   virtual void print(std::ostream &o, int indent) const = 0;
 };
 
+class StxNeg: public StxExpr {
+public:
+  StxNeg(StxExpr *e) : e(e) {}
+  StxExpr *e; 
+
+  void print(std::ostream &o, int indent) const {
+    o << "-"; e->print(o, indent);
+  }
+};
+
 class StxRange2 : public StxExpr {
 public:
   StxExpr *first;
@@ -914,6 +924,7 @@ public:
 // expr_compare[>=, <=] ->
 // expr_arith_add_sub[+, -] ->
 // expr_arith_mul_div[*, /] -> 
+// expr_exp[^] ->
 // expr_index["expr[index]"] ->
 // expr_leaf
 StxExpr *parse_expr_leaf(Tokenizer &t);
@@ -1002,8 +1013,21 @@ StxExpr *parse_expr_index(Tokenizer &t) {
     return l;
   }
 }
-StxExpr *parse_arith_mul_div(Tokenizer &t) {
+
+StxExpr *parse_arith_exp(Tokenizer &t) {
   StxExpr *l = parse_expr_index(t);
+  if (t.peek_symbol("^")) {
+    Token sym = t.consume_symbol("^");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, sym, r);
+  } else {
+    return l;
+  }
+}
+
+
+StxExpr *parse_arith_mul_div(Tokenizer &t) {
+  StxExpr *l = parse_arith_exp(t);
   if (t.peek_symbol("/")) {
     Token sym = t.consume_symbol("/");
     StxExpr *r = parse_expr(t);
@@ -1228,6 +1252,10 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
               "permutation";
       assert(false);
     }
+  } else if (t.peek_symbol("-")) {
+    t.consume_symbol("-");
+    StxExpr *leaf = parse_expr_leaf(t);
+    return new StxNeg(leaf);
   } else {
     t.print_current_loc();
     assert(false && "unknown expression leaf token");
