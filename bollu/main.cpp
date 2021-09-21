@@ -581,6 +581,31 @@ public:
   virtual void print(std::ostream &o, int indent) const = 0;
 };
 
+class StxRange2 : public StxExpr {
+public:
+  StxExpr *first;
+  StxExpr *last;
+  StxRange2(StxExpr *first, StxExpr *last) : first(first), last(last) {};
+  void print(std::ostream &o, int indent) const {
+    o << "["; first->print(o, indent);
+    o << " .. "; last->print(o, indent); o << "]";
+  }
+};
+
+class StxRange3 : public StxExpr {
+public:
+  StxExpr *first;
+  StxExpr *second;
+  StxExpr *last;
+  StxRange3(StxExpr *first, StxExpr *second, StxExpr *last) : first(first), second(second), last(last) {};
+  void print(std::ostream &o, int indent) const {
+    o << "["; first->print(o, indent);
+    o << ", "; second->print(o, indent);
+    o << " .. "; last->print(o, indent);
+    o << "]";
+  }  
+};
+
 class StxPermutation : public StxExpr {
 public:
   StxPermutation(vector<StxExpr *> es) : es(es){};
@@ -842,6 +867,7 @@ public:
   }
 };
 
+
 class StxReturn : public StxStmt {
 public:
   StxExpr *e;
@@ -884,8 +910,6 @@ StxExpr *parse_expr(Tokenizer &t);
 StxExpr *parse_expr_compare(Tokenizer &t);
 StxStmt *parse_stmt(Tokenizer &t);
 
-// list-expr -> expr
-StxExpr *parse_list_expr(Tokenizer &t);
 
 template <typename Token2Bool>
 StxBlock *parse_stmts(Tokenizer &t, Token2Bool isEnd);
@@ -907,7 +931,48 @@ StxExpr *parse_expr_logical(Tokenizer &t) {
 
 // 21. ranges
 // https://www.gap-system.org/Manuals/doc/ref/chap21.html#X79596BDE7CAF8491
-StxExpr *parse_list_expr(Tokenizer &t) { return parse_expr(t); }
+StxExpr *parse_list(Tokenizer &t) {
+  t.consume_symbol("[");
+
+  std::vector<StxExpr *> args;
+  if (t.peek_symbol("]")) {
+    t.consume_symbol("]");
+    return new StxList(args);
+  }
+  
+  while (1) {
+    args.push_back(parse_expr(t));  
+    if (t.peek_symbol("]")) {
+      t.consume_symbol("]");
+      break;
+    } else if (t.peek_symbol(",")) {
+      t.consume_symbol(",");
+      continue;
+    } else if (t.peek_symbol("..")) {
+      t.consume_symbol("..");
+      if (!(args.size() == 1 || args.size() == 2)) {
+	t.print_current_loc();
+	cerr << "expected [first..last] or [first, next..last]\n";
+	assert(false && "incorrect ..");
+      }
+      assert(args.size() == 1 || args.size() == 2);
+      StxExpr *last = parse_expr(t);
+      t.consume_symbol("]");
+      if (args.size() == 1) {
+	return new StxRange2(args[0], last);
+      } else {
+	assert(args.size() == 2);
+	return new StxRange3(args[0], args[1], last);
+      }
+      
+    } else {
+      t.print_current_loc();
+      cerr << "expected list [expr, expr, expr] or [min .. max]";
+      assert(false && "unknown parse in expression sequence");
+    }
+  }
+  return new StxList(args);
+}
 
 // expressions (4.7)
 StxExpr *parse_expr(Tokenizer &t) { return parse_expr_logical(t); }
@@ -1082,8 +1147,7 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
       return new StxVar(*ident);
     }
   } else if (t.peek_symbol("[")) {
-    vector<StxExpr *> args = parse_exprs_delimited(t, "[", "]");
-    return new StxList(args);
+    return parse_list(t);
   } else if (t.peek_keyword("function")) {
     return parse_fn_defn(t);
   } else if (t.peek_symbol("(")) {
@@ -1232,7 +1296,7 @@ StxStmt *parse_stmt(Tokenizer &t) {
     // for simple-var in list-expr do statements od;
     Token var = t.consume_identifier();
     t.consume_keyword("in");
-    StxExpr *e = parse_list_expr(t);
+    StxExpr *e = parse_expr(t);
     t.consume_keyword("do");
     StxBlock *stmts = parse_stmts(
         t, [](Tokenizer &t) -> bool { return bool(t.peek_keyword("od")); });
