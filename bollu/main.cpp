@@ -651,6 +651,17 @@ public:
   }
 };
 
+class StxListComposition : public StxExpr {
+public:
+  StxListComposition(Token lhs, StxExpr *rhs) : lhs(lhs), rhs(rhs) {};
+  Token lhs;
+  StxExpr *rhs;
+
+  void print(std::ostream &o, int indent) const {
+    o << lhs.str << "{"; rhs->print(o, indent); o << "}";
+  }  
+};
+
 class StxVar : public StxExpr {
 public:
   StxVar(Token name) : name(name){};
@@ -1141,8 +1152,17 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
       return new StxFnDefn(params, vararg, locals,
                            new StxBlock({new StxReturn(rhs)}));
     } else if (t.peek_symbol("(")) {
+      // function call
       std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
       return new StxFnCall(*ident, args);
+    } else if (t.peek_symbol("{")) {
+      // https://www.gap-system.org/Manuals/doc/ref/chap21.html#X7921047F83F5FA28
+      // list compoistion: (x{y})[i] = x[y[i]]
+      // this is probably the wrong place to do this. I think this should be done in parse_expr, not at this low level.
+      t.consume_symbol("{");
+      StxExpr *e = parse_expr(t);
+      t.consume_symbol("}");
+      return new StxListComposition(*ident, e);
     } else {
       return new StxVar(*ident);
     }
