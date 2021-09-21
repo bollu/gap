@@ -1038,6 +1038,10 @@ StxExpr *parse_expr_compare(Tokenizer &t) {
     Token sym = t.consume_symbol("=");
     StxExpr *r = parse_expr(t);
     return new StxBinop(l, sym, r);
+  } else if (t.peek_symbol("<>")) {
+    Token sym = t.consume_symbol("<>");
+    StxExpr *r = parse_expr(t);
+    return new StxBinop(l, sym, r);
   } else if (t.peek_symbol("<")) {
     Token sym = t.consume_symbol("<");
     StxExpr *r = parse_expr(t);
