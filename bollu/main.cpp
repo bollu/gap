@@ -1,4 +1,3 @@
-
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -64,7 +63,9 @@ struct Doc {
   const Kind kind;
   static void newline(ostream &o, int indent) {
     o << "\n";
-    for(int i = 0; i < indent; ++i) { o << " "; }
+    for (int i = 0; i < indent; ++i) {
+      o << " ";
+    }
   }
 
   void print(ostream &o, int indent = 0) {
@@ -186,24 +187,22 @@ std::ostream &operator<<(std::ostream &o, const Span &s) {
 }
 
 const set<std::string> keywords = {
-    "Assert", "Info",     "IsBound", "Quit", 
-    "TryNextMethod", "Unbind", "and", "atomic",
-    "break",    "continue", "do",     "elif",
-    "else",    "end",  "false",    "fi",
-    "for",    "function", "if",      "in",
-    "local",    "mod", "not",    "od",
-    "or",     "quit", "readonly", "readwrite",
-    "rec",    "repeat",   "return",  "then",
-    "true",     "until", "while"};
+    "Assert", "Info",     "IsBound",   "Quit",  "TryNextMethod",
+    "Unbind", "and",      "atomic",    "break", "continue",
+    "do",     "elif",     "else",      "end",   "false",
+    "fi",     "for",      "function",  "if",    "in",
+    "local",  "mod",      "not",       "od",    "or",
+    "quit",   "readonly", "readwrite", "rec",   "repeat",
+    "return", "then",     "true",      "until", "while"};
 
 const std::string special = "\"`()*+,-#./:;<=>~[\\]^_{}";
 
 // why is "..." not a symbol?
-const set<std::string> symbols = {"+",  "-",  "*",  "/",  "^", "~",  "!.",
-                                  "=",  "<>", "<",  "<=", ">", ">=", "![",
-                                  ":=", ".",  "..", "->", ",", ";",  "!{",
-                                  "[",  "]",  "{",  "}",  "(", ")",  ":",
-                                  "..." // TODO: check if I misunderstood something.
+const set<std::string> symbols = {
+    "+",  "-", "*",  "/",  "^",  "~", "!.", "=",  "<>", "<",
+    "<=", ">", ">=", "![", ":=", ".", "..", "->", ",",  ";",
+    "!{", "[", "]",  "{",  "}",  "(", ")",  ":",
+    "..." // TODO: check if I misunderstood something.
 };
 
 bool is_special(char c) {
@@ -217,7 +216,13 @@ bool is_special(char c) {
 bool is_whitespace(char c) { return c == ' ' || c == '\t' || c == '\n'; }
 
 struct Token {
-  enum class Kind { TOK_SYMBOL, TOK_KEYWORD, TOK_IDENTIFIER, TOK_STRING, TOK_EOF };
+  enum class Kind {
+    TOK_SYMBOL,
+    TOK_KEYWORD,
+    TOK_IDENTIFIER,
+    TOK_STRING,
+    TOK_EOF
+  };
 
   Token(Span span, Token::Kind kind, std::string str)
       : span(span), kind(kind), str(str){};
@@ -243,15 +248,18 @@ struct Tokenizer {
 
   Tokenizer(int len, const char *data)
       : len(len), data(data), loc(Loc::beginning_of_file()) {}
-  bool peek_eof() {  eat_whitespace(); return loc.si >= len; }
+  bool peek_eof() {
+    eat_whitespace();
+    return loc.si >= len;
+  }
 
   Token consume_symbol(string s) {
     assert(symbols.count(s));
     optional<Token> t = peek_symbol(s);
     if (t) {
-    assert(this->loc == t->span.begin);
-    this->loc = t->span.end;
-    return *t;
+      assert(this->loc == t->span.begin);
+      this->loc = t->span.end;
+      return *t;
     } else {
       this->print_current_loc();
       cerr << "Expected symbol |" << s << "|\n";
@@ -275,15 +283,14 @@ struct Tokenizer {
 
   Token consume_identifier() {
     optional<Token> t = peek_identifier();
-    if(t) { 
+    if (t) {
       assert(this->loc == t->span.begin);
       this->loc = t->span.end;
       return *t;
-    }
-    else {
+    } else {
       this->print_current_loc();
-      cerr << "Expected identifer.\n";
-      assert(false && "did not find expected identifier.");
+      cerr << "Expected identifer at " << this->loc << ".\n";
+      assert(false && "did not find identifier (perhaps it is a keyword?)");
     }
   }
 
@@ -303,9 +310,13 @@ struct Tokenizer {
   optional<Token> peek_symbol(string sym) {
     assert(symbols.count(sym));
     eat_whitespace();
-    if (peek_eof()) { return {}; }
+    if (peek_eof()) {
+      return {};
+    }
     const char ccur = *this->peekc();
-    if (!is_special(ccur)) { return {}; }
+    if (!is_special(ccur)) {
+      return {};
+    }
     // we have a symbol
     string s;
     Loc lend = loc;
@@ -316,11 +327,13 @@ struct Tokenizer {
       const char c = data[lend.si];
       lend = lend.next(c);
       s += c;
-      if (s.size() == sym.size()) { break; }
+      if (s.size() == sym.size()) {
+        break;
+      }
     }
 
     if (s == sym) {
-        return Token(Span(loc, lend), Token::Kind::TOK_SYMBOL, s);
+      return Token(Span(loc, lend), Token::Kind::TOK_SYMBOL, s);
     } else {
       return {};
     }
@@ -328,23 +341,29 @@ struct Tokenizer {
 
   optional<Token> peek_string() {
     eat_whitespace();
-    if (peek_eof()) { return {}; }
+    if (peek_eof()) {
+      return {};
+    }
 
     const char ccur = *this->peekc();
-    cerr << "\n\tpeeking string: " << ccur << "\n";
-    if (ccur != '\"') { return {}; }
+    // cerr << "\n\tpeeking string: " << ccur << "\n";
+    if (ccur != '\"') {
+      return {};
+    }
     string s = "\"";
     Loc lend = this->loc.next("\""); // is after the opening "
-    while(1) {
+    while (1) {
       if (lend.si >= len) {
         this->print_span(Span(loc, lend));
         assert(false && "unterminated \"");
       }
       const char c = data[lend.si];
-        // TODO: string escape.
+      // TODO: string escape.
       s += c;
       lend = lend.next(c);
-      if (c == '\"') { break; }
+      if (c == '\"') {
+        break;
+      }
     }
     return Token(Span(loc, lend), Token::Kind::TOK_STRING, s);
   }
@@ -355,7 +374,9 @@ struct Tokenizer {
       return {};
     }
     const char ccur = *this->peekc();
-    if (is_special(ccur)) { return {}; }
+    if (is_special(ccur)) {
+      return {};
+    }
     string s;
     Loc lend = loc;
     while (1) {
@@ -369,7 +390,9 @@ struct Tokenizer {
       s += data[lend.si];
       lend = lend.next(c);
     }
-    if (keywords.count(s)) { return {}; }
+    if (keywords.count(s)) {
+      return {};
+    }
     return Token(Span(loc, lend), Token::Kind::TOK_IDENTIFIER, s);
   }
 
@@ -380,7 +403,9 @@ struct Tokenizer {
       return {};
     }
     const char ccur = *this->peekc();
-    if (is_special(ccur)) { return {}; }
+    if (is_special(ccur)) {
+      return {};
+    }
     string s;
     Loc lend = loc;
     while (1) {
@@ -401,20 +426,23 @@ struct Tokenizer {
     }
   }
 
-
   void print_span(Span span) const {
     // TODO: handle multiline span
     cerr << "===\n";
     int i = span.begin.si;
-    for (; i >= 1 && data[i - 1] != '\n'; i--) {}
+    for (; i >= 1 && data[i - 1] != '\n'; i--) {
+    }
 
     cerr << "Source file [" << span.begin << ":" << span.end << "]\n";
-    const int nlines = span.end.line - span.begin.line+1;
+    const int nlines = span.end.line - span.begin.line + 1;
     if (span.begin.line == span.end.line) {
       string squiggle;
       printf("%4d>", span.begin.line);
       for (; data[i] != '\0' && data[i] != '\n'; ++i) {
-        squiggle += i == span.begin.si ? '^' : i == span.end.si ? '^' : i >= span.begin.si && i <= span.end.si ? '~' : ' ';
+        squiggle += i == span.begin.si                       ? '^'
+                    : i == span.end.si                       ? '^'
+                    : i >= span.begin.si && i <= span.end.si ? '~'
+                                                             : ' ';
         cerr << data[i];
       }
       printf("\n%4d>%s", span.begin.line, squiggle.c_str());
@@ -430,27 +458,31 @@ struct Tokenizer {
     } else {
       printf("%4d>", span.begin.line);
       string squiggle = "";
-      for(; data[i] != '\0' && data[i] != '\n'; i++) {
+      for (; data[i] != '\0' && data[i] != '\n'; i++) {
         squiggle += i == span.begin.si ? '^' : i >= span.begin.si ? '~' : ' ';
         cerr << data[i];
       }
       printf("\n%4d>%s\n", span.begin.line, squiggle.c_str());
       int nlines = 0;
-      for(i += 1; nlines < 2; i++) {
-        if (data[i] == '\n') { nlines++; printf("%4d>", span.begin.line + nlines + 1); }
-        cerr << data[i]; 
+      for (i += 1; nlines < 2; i++) {
+        if (data[i] == '\n') {
+          nlines++;
+          printf("%4d>", span.begin.line + nlines + 1);
+        }
+        cerr << data[i];
       }
       printf("%4d>%s\n", span.begin.line + 4, "  ...");
 
-
       nlines = 0;
-      int i = span.end.si-1;
+      int i = span.end.si - 1;
       for (; i >= 1 && nlines <= 3; i--) {
-        if (data[i] == '\n') { nlines++; }
+        if (data[i] == '\n') {
+          nlines++;
+        }
       }
 
       nlines = 0;
-      for(i += 1; nlines <= 2; i++) {
+      for (i += 1; nlines <= 2; i++) {
         if (data[i] == '\n') {
           nlines++;
           printf("\n%4d>", span.end.line - (2 - nlines) - 1);
@@ -459,24 +491,26 @@ struct Tokenizer {
         }
       }
 
-
       squiggle = "";
       printf("\n%4d>", span.end.line);
-      for(; data[i] != '\0' && data[i] != '\n'; i++) {
-        squiggle += i == span.end.si-1 ? '^' : i <= span.end.si ? '~' : ' ';
+      for (; data[i] != '\0' && data[i] != '\n'; i++) {
+        squiggle += i == span.end.si - 1 ? '^' : i <= span.end.si ? '~' : ' ';
         cerr << data[i];
       }
       printf("\n%4d>%s\n", span.end.line, squiggle.c_str());
-
     }
     cerr << "\nSource file [" << span.begin << ":" << span.end << "]\n";
   }
 
   void print_loc(Loc l) const {
-    if (l.si >= this->len) { printf("\n%4d>EOF", l.line); return; }
+    if (l.si >= this->len) {
+      printf("\n%4d>EOF", l.line);
+      return;
+    }
     cerr << "\n===\n";
     int i = l.si;
-    for (; i >= 1 && data[i - 1] != '\n'; i--) {}
+    for (; i >= 1 && data[i - 1] != '\n'; i--) {
+    }
 
     printf("\n%4d>", l.line);
     string squiggle;
@@ -487,9 +521,7 @@ struct Tokenizer {
     printf("\n%4d>%s\n", l.line, squiggle.c_str());
   }
 
-  void print_current_loc() {
-    this->print_loc(this->loc);
-  }
+  void print_current_loc() { this->print_loc(this->loc); }
 
 private:
   optional<char> peekc() {
@@ -516,7 +548,9 @@ private:
       if (ispeekc('#')) {
         while (1) {
           std::optional<char> c = peekc();
-          if (!c) { return; }
+          if (!c) {
+            return;
+          }
           consumec(*c);
           if (*c == '\n') {
             break;
@@ -533,7 +567,6 @@ private:
       }
     }
   }
-
 };
 
 // SYNTAX
@@ -548,6 +581,21 @@ public:
   virtual void print(std::ostream &o, int indent) const = 0;
 };
 
+class StxPermutation : public StxExpr {
+public:
+  StxPermutation(vector<StxExpr *> es) : es(es){};
+  void print(std::ostream &o, int indent) const {
+    o << "(";
+    for (int i = 0; i < es.size(); ++i) {
+      if (i > 0) {
+        o << ", ";
+      }
+      es[i]->print(o, indent);
+    }
+    o << ")";
+  }
+  vector<StxExpr *> es;
+};
 
 class StxBool : public StxExpr {
 public:
@@ -555,10 +603,10 @@ public:
   void print(std::ostream &o, int indent) const {
     o << (value ? "true" : "false");
   }
+
 private:
   bool value;
 };
-
 
 class StxFnCall : public StxExpr {
 public:
@@ -605,8 +653,6 @@ public:
   }
 };
 
-
-
 class StxBinop : public StxExpr {
 public:
   StxBinop(StxExpr *left, Token symbol, StxExpr *right)
@@ -639,24 +685,22 @@ public:
   }
 };
 
-
-
 // [a, b, c]
 class StxList : public StxExpr {
-  public:
-  StxList(vector<StxExpr *> args) : args(args) {};
-
+public:
+  StxList(vector<StxExpr *> args) : args(args){};
 
   void print(std::ostream &o, int indent) const {
     o << "[";
-    for(int i = 0; i < args.size(); ++i){
-      if (i > 0) o << ", ";
+    for (int i = 0; i < args.size(); ++i) {
+      if (i > 0)
+        o << ", ";
       args[i]->print(o, indent);
     }
     o << "]";
   }
 
-  private:
+private:
   vector<StxExpr *> args;
 };
 
@@ -665,7 +709,8 @@ public:
   virtual void print(std::ostream &o, int indent) const = 0;
 };
 
-// TODO, HACK: currently parse anything as the LHS, actually should be a subset of expressions called lvalue, perhaps?
+// TODO, HACK: currently parse anything as the LHS, actually should be a subset
+// of expressions called lvalue, perhaps?
 class StxAssign : public StxStmt {
 public:
   StxAssign(StxExpr *lhs, StxExpr *rhs) : lhs(lhs), rhs(rhs){};
@@ -715,31 +760,35 @@ public:
   }
 };
 
-
-
 class StxFnDefn : public StxExpr {
-  public:
-    StxFnDefn(vector<Token> params, bool vararg, 
-        vector<Token> locals, StxBlock *stmts) : params(params), vararg(vararg), locals(locals), stmts(stmts) {};
+public:
+  StxFnDefn(vector<Token> params, bool vararg, vector<Token> locals,
+            StxBlock *stmts)
+      : params(params), vararg(vararg), locals(locals), stmts(stmts){};
 
   void print(std::ostream &o, int indent) const {
     o << "function (";
-    for(int i = 0; i < params.size(); ++i){
-      if (i > 0) o << ", ";
+    for (int i = 0; i < params.size(); ++i) {
+      if (i > 0)
+        o << ", ";
       o << params[i].str;
     }
-    if (vararg) { o << "..."; }
+    if (vararg) {
+      o << "...";
+    }
     o << ")";
     indent += 1;
 
     Doc::newline(o, indent);
     if (locals.size() > 0) {
       o << "local ";
-      for(int i = 0; i < locals.size(); ++i) {
-        if (i > 0) { o << ", "; }
+      for (int i = 0; i < locals.size(); ++i) {
+        if (i > 0) {
+          o << ", ";
+        }
         o << locals[i].str;
       }
-      o << ";"; 
+      o << ";";
       Doc::newline(o, indent);
     }
 
@@ -748,15 +797,14 @@ class StxFnDefn : public StxExpr {
     o << "end";
     indent -= 1;
     Doc::newline(o, indent);
-
   }
-  private:
-    vector<Token> params;
-    bool vararg;
-    vector<Token> locals;
-    StxBlock *stmts;
-};
 
+private:
+  vector<Token> params;
+  bool vararg;
+  vector<Token> locals;
+  StxBlock *stmts;
+};
 
 class StxIf : public StxStmt {
 public:
@@ -770,20 +818,24 @@ public:
       : cond(cond), thenb(thenb), elifs(elifs), elseb(elseb){};
 
   void print(std::ostream &o, int indent) const {
-    o << "if "; cond->print(o, indent+1); o << " then";
-    Doc::newline(o, indent+1);
-    thenb->print(o, indent+1);
+    o << "if ";
+    cond->print(o, indent + 1);
+    o << " then";
+    Doc::newline(o, indent + 1);
+    thenb->print(o, indent + 1);
     for (int i = 0; i < elifs.size(); ++i) {
       Doc::newline(o, indent);
-      o << " elif "; elifs[i].first->print(o, indent+1);  o << " then";
-      Doc::newline(o, indent+1);
-      elifs[i].second->print(o, indent+1);
+      o << " elif ";
+      elifs[i].first->print(o, indent + 1);
+      o << " then";
+      Doc::newline(o, indent + 1);
+      elifs[i].second->print(o, indent + 1);
     }
     if (elseb) {
       Doc::newline(o, indent);
       o << " else ";
-      Doc::newline(o, indent+1);
-      (*elseb)->print(o, indent+1);
+      Doc::newline(o, indent + 1);
+      (*elseb)->print(o, indent + 1);
     }
     Doc::newline(o, indent);
     o << " fi";
@@ -807,24 +859,25 @@ public:
   StxExpr *rhs;
   StxBlock *body;
 
-  StxFor(Token lhs, StxExpr *rhs, StxBlock *body) : lhs(lhs), rhs(rhs), body(body) {}
+  StxFor(Token lhs, StxExpr *rhs, StxBlock *body)
+      : lhs(lhs), rhs(rhs), body(body) {}
   void print(std::ostream &o, int indent) const {
-    o << "for " << lhs.str << " in "; rhs->print(o, indent+1); o << " do";
-    Doc::newline(o, indent+1);
-    body->print(o, indent+1);
+    o << "for " << lhs.str << " in ";
+    rhs->print(o, indent + 1);
+    o << " do";
+    Doc::newline(o, indent + 1);
+    body->print(o, indent + 1);
     Doc::newline(o, indent);
     o << "od";
   }
 };
 
-
-
-// expr -> 
-// expr_logical[and, or] -> 
-// expr_compare[>=, <=] -> 
-// expr_arith[+, -] -> 
-// expr_index["expr[index]"] -> 
-// expr_leaf 
+// expr ->
+// expr_logical[and, or] ->
+// expr_compare[>=, <=] ->
+// expr_arith[+, -] ->
+// expr_index["expr[index]"] ->
+// expr_leaf
 StxExpr *parse_expr_leaf(Tokenizer &t);
 StxExpr *parse_expr_index(Tokenizer &t);
 StxExpr *parse_expr(Tokenizer &t);
@@ -834,7 +887,7 @@ StxStmt *parse_stmt(Tokenizer &t);
 // list-expr -> expr
 StxExpr *parse_list_expr(Tokenizer &t);
 
-template<typename Token2Bool>
+template <typename Token2Bool>
 StxBlock *parse_stmts(Tokenizer &t, Token2Bool isEnd);
 
 StxExpr *parse_expr_logical(Tokenizer &t) {
@@ -852,16 +905,12 @@ StxExpr *parse_expr_logical(Tokenizer &t) {
   }
 };
 
-
-// 21. ranges https://www.gap-system.org/Manuals/doc/ref/chap21.html#X79596BDE7CAF8491
-StxExpr *parse_list_expr(Tokenizer &t) {
-  return parse_expr(t);
-}
+// 21. ranges
+// https://www.gap-system.org/Manuals/doc/ref/chap21.html#X79596BDE7CAF8491
+StxExpr *parse_list_expr(Tokenizer &t) { return parse_expr(t); }
 
 // expressions (4.7)
-StxExpr *parse_expr(Tokenizer &t) { 
-  return parse_expr_logical(t);
-}
+StxExpr *parse_expr(Tokenizer &t) { return parse_expr_logical(t); }
 
 // e[e]
 StxExpr *parse_expr_index(Tokenizer &t) {
@@ -902,7 +951,7 @@ StxExpr *parse_expr_compare(Tokenizer &t) {
     Token sym = t.consume_symbol("=");
     StxExpr *r = parse_expr(t);
     return new StxBinop(l, sym, r);
-  } else if (t.peek_symbol("<") ) {
+  } else if (t.peek_symbol("<")) {
     Token sym = t.consume_symbol("<");
     StxExpr *r = parse_expr(t);
     return new StxBinop(l, sym, r);
@@ -932,27 +981,27 @@ vector<StxExpr *> parse_exprs_delimited(Tokenizer &t, string sl, string sr) {
       continue;
     } else {
       t.print_current_loc();
-      cerr << "expected list of expressions of the form |" << sl << "expr, expr, ... " << sr << "|\n";
+      cerr << "expected list of expressions of the form |" << sl
+           << "expr, expr, ... " << sr << "|\n";
       assert(false && "unknown parse in expression sequence");
     }
   }
   return args;
 }
 
-StxExpr * parse_fn_defn(Tokenizer &t) {
+StxExpr *parse_fn_defn(Tokenizer &t) {
   t.consume_keyword("function"); // consume "function"
 
   t.consume_symbol("(");
   bool vararg = false;
   vector<Token> params;
-  while(1) {
+  while (1) {
     Token param = t.consume_identifier();
     params.push_back(param);
-    if (t.peek_symbol(")")) { 
-        t.consume_symbol(")");
-        break;
-    }
-    else if (t.peek_symbol(",")) {
+    if (t.peek_symbol(")")) {
+      t.consume_symbol(")");
+      break;
+    } else if (t.peek_symbol(",")) {
       t.consume_symbol(",");
       continue;
     } else if (t.peek_symbol("...")) {
@@ -971,10 +1020,11 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
   vector<Token> locals;
   if (t.peek_keyword("local")) {
     t.consume_keyword("local");
-    while(1) {
+    while (1) {
       locals.push_back(t.consume_identifier());
       if (t.peek_symbol(";")) {
-        t.consume_symbol(";"); break;
+        t.consume_symbol(";");
+        break;
       } else if (t.peek_symbol(",")) {
         t.consume_symbol(",");
         continue;
@@ -987,7 +1037,8 @@ StxExpr * parse_fn_defn(Tokenizer &t) {
   }
 
   // done parsng function params. now parse statements.
-  StxBlock *stmts = parse_stmts(t, [](Tokenizer &t) -> bool { return bool(t.peek_keyword("end")); });
+  StxBlock *stmts = parse_stmts(
+      t, [](Tokenizer &t) -> bool { return bool(t.peek_keyword("end")); });
   t.consume_keyword("end");
   return new StxFnDefn(params, vararg, locals, stmts);
 }
@@ -1003,8 +1054,8 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
     return new StxBool(false);
   } else if (t.peek_keyword("not")) {
     t.consume_keyword("not");
-      StxExpr *e = parse_expr(t);
-      return new StxNot(e);
+    StxExpr *e = parse_expr(t);
+    return new StxNot(e);
 
   } else if (optional<Token> s = t.peek_string()) {
     t.consume_string();
@@ -1019,10 +1070,11 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
     if (t.peek_symbol("->")) {
       t.consume_symbol("->");
       StxExpr *rhs = parse_expr(t);
-      const vector<Token> params= {*ident};
+      const vector<Token> params = {*ident};
       const vector<Token> locals;
       const bool vararg = false;
-      return new StxFnDefn(params, vararg, locals, new StxBlock({new StxReturn(rhs)}));
+      return new StxFnDefn(params, vararg, locals,
+                           new StxBlock({new StxReturn(rhs)}));
     } else if (t.peek_symbol("(")) {
       std::vector<StxExpr *> args = parse_exprs_delimited(t, "(", ")");
       return new StxFnCall(*ident, args);
@@ -1032,13 +1084,47 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
   } else if (t.peek_symbol("[")) {
     vector<StxExpr *> args = parse_exprs_delimited(t, "[", "]");
     return new StxList(args);
-  }  else if (t.peek_keyword("function")) {
+  } else if (t.peek_keyword("function")) {
     return parse_fn_defn(t);
   } else if (t.peek_symbol("(")) {
     t.consume_symbol("(");
+    // empty permutation
+    if (t.peek_symbol(")")) {
+      t.consume_symbol(")");
+      return new StxPermutation({});
+    }
+
+    // TODO: ambiguous? can be either (permutation) or (expr)?
     StxExpr *e = parse_expr(t);
-    t.consume_symbol(")");
-    return e;
+    if (t.peek_symbol(")")) {
+      t.consume_symbol(")");
+      return e;
+    } else if (t.peek_symbol(",")) {
+      // okay, we have a permutation!
+      vector<StxExpr *> es;
+      es.push_back(e);
+
+      t.consume_symbol(",");
+      while (1) {
+        es.push_back(parse_expr(t));
+        if (t.peek_symbol(")")) {
+          t.consume_symbol(")");
+          return new StxPermutation(es);
+        } else if (t.peek_symbol(",")) {
+          t.consume_symbol(",");
+          continue;
+        } else {
+          t.print_current_loc();
+          cerr << "expected , or ) to continue permutation";
+          assert(false);
+        }
+      }
+    } else {
+      t.print_current_loc();
+      cerr << "expected ) to close bracketed expression or , to create "
+              "permutation";
+      assert(false);
+    }
   } else {
     t.print_current_loc();
     assert(false && "unknown expression leaf token");
@@ -1048,14 +1134,14 @@ StxExpr *parse_expr_leaf(Tokenizer &t) {
 
 StxStmt *parse_assgn_or_procedure_call(Tokenizer &t) {
   Token name = [&]() -> Token {
-    // TODO: some keywords behave like functions.
-    // Is it better to keep them like this?
-    if (optional<Token> info = t.peek_keyword("Info")) {
-      t.consume_keyword("Info");
-      return *info;
-    } else {
-      return t.consume_identifier(); 
+    vector<string> allowedKeywords = {"Info", "TryNextMethod"};
+    for (string kwd : allowedKeywords) {
+      if (optional<Token> info = t.peek_keyword(kwd)) {
+        t.consume_keyword(kwd);
+        return *info;
+      }
     }
+    return t.consume_identifier();
   }();
 
   if (t.peek_symbol("(")) {
@@ -1079,7 +1165,6 @@ StxStmt *parse_assgn_or_procedure_call(Tokenizer &t) {
   assert(false && "unknown symbol at top level");
 }
 
-
 StxStmt *parse_stmt(Tokenizer &t);
 
 template <typename Token2Bool>
@@ -1101,12 +1186,12 @@ StxBlock *parse_stmts(Tokenizer &t, Token2Bool isEnd) {
   return new StxBlock(stmts);
 };
 
-
 // Statement(4.14)
 StxStmt *parse_stmt(Tokenizer &t) {
   std::cerr << "\t" << __PRETTY_FUNCTION__ << endl;
   const auto is_fi_or_elif_or_else = [](Tokenizer &t) -> bool {
-    return bool(t.peek_keyword("fi")) || bool(t.peek_keyword("else")) || bool(t.peek_keyword("elif"));
+    return bool(t.peek_keyword("fi")) || bool(t.peek_keyword("else")) ||
+           bool(t.peek_keyword("elif"));
   };
 
   if (t.peek_keyword("if")) {
@@ -1138,8 +1223,7 @@ StxStmt *parse_stmt(Tokenizer &t) {
       }
     }
     return new StxIf(cond, thenb, elifs, elseb);
-  } 
-  else if (t.peek_keyword("return")) {
+  } else if (t.peek_keyword("return")) {
     t.consume_keyword("return");
     StxExpr *e = parse_expr(t);
     return new StxReturn(e);
@@ -1150,9 +1234,8 @@ StxStmt *parse_stmt(Tokenizer &t) {
     t.consume_keyword("in");
     StxExpr *e = parse_list_expr(t);
     t.consume_keyword("do");
-    StxBlock *stmts = parse_stmts(t, [](Tokenizer &t) -> bool{
-        return bool(t.peek_keyword("od"));
-        });
+    StxBlock *stmts = parse_stmts(
+        t, [](Tokenizer &t) -> bool { return bool(t.peek_keyword("od")); });
     t.consume_keyword("od");
     return new StxFor(var, e, stmts);
 
