@@ -6,4 +6,7 @@
 
 # Progress
 - successfully parse `grp/basic.gd`
+- Can parse `grp/basicprm.gd`.
 - Next, should parse `grp/basicprm.gi` to handle permutation notation.
+- `lib/stbc.gd` and `lib/stbc.gi` for stabilizer chains for Schrier tree.
+- `lib/stbcrand.gi` : random construction of stabilizer chains.
